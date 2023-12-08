@@ -128,23 +128,25 @@ int main(int argc, char *argv[])
 
 	fprintf(stdout, "PROGMEM static const uint8_t image[] =//%ld*%ld\n{\n", stBmpInfo.biWidth, stBmpInfo.biHeight);
 
-	LONG lHigh = stBmpInfo.biHeight;
-	LONG lWidt = stBmpInfo.biWidth;
-	LONG lPage = lHigh / 8 + ((lHigh % 8) != 0);//除以并向上舍入
+	LONG lBmpHeight = stBmpInfo.biHeight;
+	LONG lBmpWidth = stBmpInfo.biWidth;
+#define PAGE_SIZE 8//1byte->8bit
+	LONG lBmpPage = lBmpHeight / PAGE_SIZE + ((lBmpHeight % PAGE_SIZE) != 0);//除以并向上舍入
 
 	LONG lLine = 0;
-	for (LONG ip = 0; ip < lPage; ++ip)//一个页面是一列中的8行
+	for (LONG lPageIdx = 0; lPageIdx < lBmpPage; ++lPageIdx)//一个页面是一列中的8行
 	{
-		LONG lPageHigh = min((ip + 1) * 8, lHigh);
-		for (LONG iw = 0; iw < lWidt; ++iw)//访问每一列
+		LONG lHeightBeg = lPageIdx * PAGE_SIZE;//当前page起始索引
+		LONG lHegihtEnd = min(lHeightBeg + PAGE_SIZE, lBmpHeight);//当前page结束索引（与起始相比最大差是8，如果超出位图大小就截断大小，每次访问一个page大小）
+		for (LONG lWidthIdx = 0; lWidthIdx < lBmpWidth; ++lWidthIdx)//访问每一列
 		{
 			UINT8 u8CurByte = 0;
-			for (LONG ih = ip * 8; ih < lPageHigh; ++ih)//访问每一页面中的每一行
+			for (LONG lHeightIdx = lHeightBeg; lHeightIdx < lHegihtEnd; ++lHeightIdx)//访问每一页面中的每一行
 			{
-				u8CurByte |= (UINT8)bBitArr[ih * stBmpInfo.biWidth + iw] << (ih - ip * 8);
+				u8CurByte |= (UINT8)bBitArr[lHeightIdx * lBmpWidth + lWidthIdx] << (lHeightIdx - lHeightBeg);//组合位到8bit变量
 			}
 			
-			fprintf(stdout, "0x%02X,", u8CurByte);
+			fprintf(stdout, "0x%02X,", u8CurByte);//输出
 			if (++lLine == 8)
 			{
 				putchar('\n');
@@ -152,8 +154,9 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
+#undef PAGE_SIZE
 
-	if (lLine != 0)//退出循环前没有刚好换过行则换行一下，否则刚好换过行就无需重复换行
+	if (lLine != 0)//（防止重复换行）退出循环前没有刚好换过行则换行一下，否则刚好换过行就无需重复换行
 	{
 		putchar('\n');
 	}
