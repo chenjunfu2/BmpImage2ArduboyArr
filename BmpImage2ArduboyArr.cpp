@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <ctype.h>
 
-
 int main(int argc, char *argv[])
 {
 	if (argc != 2)//接受1参数，其中参数0固定为本exe名字
@@ -11,7 +10,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	FILE *fi = fopen(argv[1], "rb");
+	FILE *fi = fopen(argv[1], "rb");//注意一定要b模式二进制读取，要不然等着Windows自动给你把二进制数据换行转换出CRLF吧
 
 	if (fi == NULL)
 	{
@@ -23,7 +22,7 @@ int main(int argc, char *argv[])
 	BITMAPFILEHEADER stBmpHead;
 	if (fread(&stBmpHead, sizeof(stBmpHead), 1, fi) != 1)
 	{
-		fprintf(stderr, "Read file [%s] error\n", argv[1]);
+		fprintf(stderr, "Read bmp head error\n");
 		return -1;
 	}
 
@@ -31,7 +30,7 @@ int main(int argc, char *argv[])
 	BITMAPINFOHEADER stBmpInfo;
 	if (fread(&stBmpInfo, sizeof(stBmpInfo), 1, fi) != 1)
 	{
-		fprintf(stderr, "Read file [%s] error\n", argv[1]);
+		fprintf(stderr, "Read bmp info error\n");
 		return -1;
 	}
 
@@ -39,7 +38,7 @@ int main(int argc, char *argv[])
 	RGBQUAD stPalette[2];
 	if (fread(stPalette, sizeof(stPalette), 1, fi) != 1)
 	{
-		fprintf(stderr, "Read file [%s] error\n", argv[1]);
+		fprintf(stderr, "Read bmp palette error\n");
 		return -1;
 	}
 
@@ -49,7 +48,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	if (stBmpHead.bfType != *(WORD*)&"BM" ||
+	if (stBmpHead.bfType != *(const WORD*)&"BM" ||//短字符串比较：转换成word类型直接比较而不是通过strcmp
 		stBmpInfo.biBitCount != 1 ||
 		stBmpInfo.biCompression != BI_RGB)
 	{
@@ -67,14 +66,13 @@ int main(int argc, char *argv[])
 		stBmpInfo.biHeight = -stBmpInfo.biHeight;
 	}
 
-
-	//((stBmpInfo.biWidth+7)/8+3)&(~3)->要读取的每行字节数，加上7除以8为了求出宽所占的bit数向上舍入有多少字节，加上3与上取反3为了求出向上舍入到4的倍数字节边界，除以4是因为使用int读取
+	//下面的运算代表要读取的每行的字节数(宽度)，加上7除以8为了求出宽所占的bit数向上舍入有多少字节，加上3与上取反3为了求出向上舍入到4的倍数字节边界
 	LONG lBitMapActualWidth = (((stBmpInfo.biWidth + 7) / 8 + 3) & ~3);
-	LONG lBitMapActualHeight = stBmpInfo.biHeight;
-	UINT8 *u8MapArr = new UINT8[lBitMapActualWidth * lBitMapActualHeight];//这里用4字节类型存储，所以除以4
-	if (fread(u8MapArr, sizeof(u8MapArr[0]), lBitMapActualWidth * lBitMapActualHeight, fi) != lBitMapActualWidth * lBitMapActualHeight)
+	LONG lBitMapActualHeight = stBmpInfo.biHeight;//高度
+	UINT8 *u8MapArr = new UINT8[lBitMapActualWidth * lBitMapActualHeight];
+	if (fread(u8MapArr, sizeof(u8MapArr[0]), lBitMapActualWidth * lBitMapActualHeight, fi) != lBitMapActualWidth * lBitMapActualHeight)//一次性读入
 	{
-		fprintf(stderr, "Read file [%s] error\n", argv[1]);
+		fprintf(stderr, "Read bmp data error\n");
 		return -1;
 	}
 
@@ -91,7 +89,7 @@ int main(int argc, char *argv[])
 	};
 
 
-	//按顺序放入bit数组中
+	//按左上角存储顺序放入bool表示的bit数组中
 	bool *bBitArr = new bool[stBmpInfo.biWidth * stBmpInfo.biHeight];
 	//y*stBmpInfo.biWidth+x
 
@@ -111,22 +109,24 @@ int main(int argc, char *argv[])
 
 	delete[] u8MapArr;
 
+	//控制台字符模式输出图像
 	//for (LONG ih = 0; ih < stBmpInfo.biHeight; ++ih)
 	//{
 	//	for (LONG iw = 0; iw < stBmpInfo.biWidth; ++iw)
 	//	{
-	//		printf("%s", bBitArr[ih * stBmpInfo.biWidth + iw] ? "■" : "  ");
+	//		fprintf(stdout, "%s", bBitArr[ih * stBmpInfo.biWidth + iw] ? "■" : "  ");
 	//	}
 	//	putchar('\n');
 	//}
 
 
 	/*
+	//转换图像
 		bmp:横向存储，每bit一个像素，图像像素行从左到右对应字节位从左到右，像素数对齐4字节32bit，少于补0，图像列从上到下一次存储，每行结束后开始下一列，图像列高度值为正则从左下角开始存储，为负是左上角
 		ard:页面存储，每bit一个像素，图像像素每一列中的每8行为一个页面，这一列中从上到下对应比特位从低到高，然后是下一列，直到这一个页面结束，开始下一个页面，如果这一列不满8行则0填充
 	*/
 
-	printf("PROGMEM static const uint8_t image[] =//%ld*%ld\n{\n", stBmpInfo.biWidth, stBmpInfo.biHeight);
+	fprintf(stdout, "PROGMEM static const uint8_t image[] =//%ld*%ld\n{\n", stBmpInfo.biWidth, stBmpInfo.biHeight);
 
 	LONG lHigh = stBmpInfo.biHeight;
 	LONG lWidt = stBmpInfo.biWidth;
@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
 				u8CurByte |= (UINT8)bBitArr[ih * stBmpInfo.biWidth + iw] << (ih - ip * 8);
 			}
 			
-			printf("0x%02X,", u8CurByte);
+			fprintf(stdout, "0x%02X,", u8CurByte);
 			if (++lLine == 8)
 			{
 				putchar('\n');
@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
 	{
 		putchar('\n');
 	}
-	printf("};");
+	fprintf(stdout, "};");
 
 	delete[] bBitArr;
 	fclose(fi);
